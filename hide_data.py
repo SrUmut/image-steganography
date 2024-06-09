@@ -1,32 +1,72 @@
-from PIL import Image
+# Default modules
 import os
+
+# Modules that need to be downloaded
 import rsa
-import utils
-from utils import ALPHA_LEVEL
+from PIL import Image
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 
-PUBLIC = "RSAPublic"
-AES = "AES"
+ALPHA_LEVEL = 128
 
-TOO_LARGE_DATA = "tld"
-INVALID_KEY = "ik"
+ENC_ERR = "Encryption Error"
+NES = "Not Enough Space"
+DONE = "Successfuly Done"
 
 def get_file_content(file_path):
     with open(file_path, "rb") as f:
         return f.read()
     
-# split each byte of data into 2-bit 4 pieces and append to list
-def get_two_bit_data(file_content, two_bit_data):
+def get_file_extension(file_path):
+    return os.path.splitext(file_path)[1][1:]
+
+def content_to_two_bit_data(file_content, two_bit_data):
     for char in file_content:
         two_bit_data.append(char >> 6)
         two_bit_data.append((char >> 4) & 0b11)
         two_bit_data.append((char >> 2) & 0b11)
         two_bit_data.append(char & 0b11)
 
-def get_file_ext(file_path):
-    return os.path.splitext(file_path)[1][1:]
+def get_len_data(two_bit_data):
+    len_data = [int(byte) for byte in len(two_bit_data).to_bytes(4, byteorder="big")]
+    for _ in range(4 - len(len_data)):
+        len_data.insert(0, 0)
+    return len_data
 
-# 8 bytes (64 bits): 32 2-bit pieces for file extension
-def add_ext_to_two_bit_data(file_ext, two_bit_data):
+def get_ext_data(file_ext):
+    ext_data = [ord(character) for character in file_ext]
+    for _ in range(8 - len(ext_data)):
+        ext_data.append(0)
+    return ext_data
+
+def encrypt_metadata(ext_data, len_data):
+    byte_data = bytes(ext_data+len_data)
+    key = b'i\x8d\x1eJ\xd1^Z\x7f\xf8\xb3K\x93\x94\xc6\xf0\xcf'
+    cipher = AES.new(key, AES.MODE_ECB)
+    encrypted_metadata = cipher.encrypt(pad(byte_data, AES.block_size))
+    return encrypted_metadata
+
+def get_two_bit_metadata(encrypted_metadata):
+    two_bit_list = []
+    for byte in encrypted_metadata:
+        two_bit_list.append(byte >> 6)
+        two_bit_list.append((byte >> 4) & 0b11)
+        two_bit_list.append((byte >> 2) & 0b11)
+        two_bit_list.append(byte & 0b11)
+    return two_bit_list
+
+# 4 bytes = 32 bits = 16 2-bit pieces to hide data length
+def append_len(two_bit_data):
+    length = len(two_bit_data)
+    len_data = []
+    chooser = 0xC0000000
+    for shift in range(30, -1, -2):
+        len_data.append((length & chooser) >> shift)
+        chooser = chooser >> 2
+    return len_data + two_bit_data
+
+# 8 bytes = 64 bits = 32 2-bit pieces to hide file extension
+def append_ext(file_ext, two_bit_data):
     two_bit_ext = []
     for char in file_ext:
         char = ord(char)
@@ -38,90 +78,54 @@ def add_ext_to_two_bit_data(file_ext, two_bit_data):
         two_bit_ext.append(0)
     return two_bit_ext + two_bit_data
 
-# append length of the two bit data to the head of the list
-# length data is 32 bit, 16 2-bit  pieces
-def add_len_to_two_bit_data(two_bit_data):
-    two_bit_data_len = len(two_bit_data)
-    len_data = []
-    chooser = 0xC0000000
-    for shift in range(30, -1, -2):
-        len_data.append((two_bit_data_len & chooser) >> shift)
-        chooser = chooser >> 2
-    return len_data + two_bit_data
-
-# modify image by hiding data into it
 def modify_image(img, two_bit_data):
-    column_count = img.size[0]
-    for idx, two_bit in enumerate(two_bit_data):
-        row_idx = int(idx / (column_count * 3))
-        idx = idx % (column_count * 3)
-        column_idx = int(idx / 3)
-        idx = idx % 3
-        pixel = list(img.getpixel((column_idx, row_idx)))
-        pixel[idx] = (pixel[idx] & 0b11111100) | two_bit
-        img.putpixel((column_idx, row_idx), tuple(pixel))
-    
-def modify_image2(img, two_bit_data):
-    i = 0   #index for two bit data
+    i = 0 # index for two_bit_data
     len_data = len(two_bit_data)
-    four_channel = len(img.getpixel((0, 0))) == 4
+    # is image four channel (rgba) or not (rgb)
+    four_channel = len(img.getpixel((0, 0))) == 4 
     for row_idx in range(img.height):
         for column_idx in range(img.width):
             pixel = list(img.getpixel((column_idx, row_idx)))
+            # if alpha channel is less than minimum value skip that pixel
             if four_channel and pixel[3] < ALPHA_LEVEL:
                 continue
-            for colord_idx in (0, 1, 2):
-                color = pixel[colord_idx]
+            # iterate over color channels of pixel and hide data to each channel
+            for color_idx in (0, 1, 2):
+                color = pixel[color_idx]
                 color = (color & 0b11111100) | two_bit_data[i]
-                pixel[colord_idx] = color
+                pixel[color_idx] = color
                 i += 1
                 if i >= len_data:
                     img.putpixel((column_idx, row_idx), tuple(pixel))
-                    return
+                    return True
             img.putpixel((column_idx, row_idx), tuple(pixel))
-            
+    # If code comes here it means there is no eanough space for the data in the image
+    return False
 
-def max_data_size_for_enc(key):
-    return rsa.common.bit_size(key.n) // 8 - 11
 
-# check if data can be encrypted with given key
-def can_enc(data, key):
-    return len(data) <= max_data_size_for_enc(key)
 
-def encrypt_data(data, key):
-    # data must be in byte format
-    return rsa.encrypt(data, key)
-
-def max_data_size(img):
-    total = int((img.size[0] * img.size[1] * 3 - 16 - 32)/4)
-    if len(img.getpixel((0, 0))) == 3:
-        return total
-    else:
-        width, height = img.size
-        for row_idx in range(height):
-            for column_idx in range(width):
-                pixel = img.getpixel((column_idx, row_idx))
-                if pixel[3] < ALPHA_LEVEL:
-                    total -= 1
-    return total
-            
-
-def hide(image_path, file_path, output_path, key="", enc_type=""):
+def main(image_path, file_path, output_path, key):
     img = Image.open(image_path)
-    max_size = max_data_size(img)
     file_content = get_file_content(file_path)
-    if (max_size < len(file_content)):
-        return TOO_LARGE_DATA
-    if key != "":
-        if hasattr(key, 'n') and hasattr(key, 'e'):
-            file_content = encrypt_data(file_content, key)
-        else:
-            return INVALID_KEY
+    if key:
+        try:
+            file_content = rsa.encrypt(file_content, key)
+        except:
+            return ENC_ERR
     two_bit_data = []
-    get_two_bit_data(file_content, two_bit_data)
-    two_bit_data = add_len_to_two_bit_data(two_bit_data)
-    two_bit_data = add_ext_to_two_bit_data(get_file_ext(file_path), two_bit_data)
-    modify_image2(img, two_bit_data)
+    content_to_two_bit_data(file_content, two_bit_data)
+    #two_bit_data = append_len(two_bit_data)
+    file_ext = get_file_extension(file_path)
+    #two_bit_data = append_ext(file_ext, two_bit_data)
+    len_data = get_len_data(two_bit_data)
+    ext_data = get_ext_data(file_ext)
+    metadata = encrypt_metadata(ext_data, len_data)
+    two_bit_metadata = get_two_bit_metadata(metadata)
+    two_bit_data = two_bit_metadata + two_bit_data
+    done = modify_image(img, two_bit_data)
+    if not done:
+        return NES
     img.save(output_path)
+    return DONE
 
 
