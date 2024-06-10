@@ -55,29 +55,6 @@ def get_two_bit_metadata(encrypted_metadata):
         two_bit_list.append(byte & 0b11)
     return two_bit_list
 
-# 4 bytes = 32 bits = 16 2-bit pieces to hide data length
-def append_len(two_bit_data):
-    length = len(two_bit_data)
-    len_data = []
-    chooser = 0xC0000000
-    for shift in range(30, -1, -2):
-        len_data.append((length & chooser) >> shift)
-        chooser = chooser >> 2
-    return len_data + two_bit_data
-
-# 8 bytes = 64 bits = 32 2-bit pieces to hide file extension
-def append_ext(file_ext, two_bit_data):
-    two_bit_ext = []
-    for char in file_ext:
-        char = ord(char)
-        two_bit_ext.append(char >> 6)
-        two_bit_ext.append((char >> 4) & 0b11)
-        two_bit_ext.append((char >> 2) & 0b11)
-        two_bit_ext.append(char & 0b11)
-    for _ in range(32 - len(two_bit_ext)):
-        two_bit_ext.append(0)
-    return two_bit_ext + two_bit_data
-
 def modify_image(img, two_bit_data):
     i = 0 # index for two_bit_data
     len_data = len(two_bit_data)
@@ -114,9 +91,7 @@ def main(image_path, file_path, output_path, key):
             return ENC_ERR
     two_bit_data = []
     content_to_two_bit_data(file_content, two_bit_data)
-    #two_bit_data = append_len(two_bit_data)
     file_ext = get_file_extension(file_path)
-    #two_bit_data = append_ext(file_ext, two_bit_data)
     len_data = get_len_data(two_bit_data)
     ext_data = get_ext_data(file_ext)
     metadata = encrypt_metadata(ext_data, len_data)

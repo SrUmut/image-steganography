@@ -59,7 +59,7 @@ def hide():
     # if encryption is checked
     if hd_enc_checkbox_var.get():
         key_path = hd_enc_key_path.get()
-        key = get_key(key_path, hd_enc_key_type_var.get())
+        key = get_key(key_path, "Public Key")
         # if get key returned false raise error
         if not key:
             tk.messagebox.showwarning("Error", f"Please provide a legit key!")
@@ -77,7 +77,7 @@ def extract():
     # if decrpytion is checked
     if ed_dec_checkbox_var.get():
         key_path = ed_dec_key_path.get()
-        key = get_key(key_path, ed_dec_key_type_var.get())
+        key = get_key(key_path, "Private Key")
         if not key:
             tk.messagebox.showwarning("Error", f"Please provide a legit key!")
     if ed.main(ed_input_image_path.get(), ed_output_file_path.get(), key):
@@ -91,9 +91,6 @@ window.title("PNG Steganography")
 window.geometry("720x480")
 window.resizable(False, False)
 notebook = ttk.Notebook(window)
-
-
-key_types = ("Public Key", "Private Key")
 
 
 ### Hide Data
@@ -139,16 +136,9 @@ hd_enc_key_frame = ttk.Frame(hide_data)
 hd_enc_key_button = ttk.Button(hd_enc_key_frame, text="Encryption Key", command=lambda: get_input_path(hd_enc_key_path, [("", "*.txt"), ("", "*.key"), ("", "*.pem")]))
 hd_enc_key_path = tk.StringVar()
 hd_enc_key_entry = ttk.Entry(hd_enc_key_frame, textvariable=hd_enc_key_path)
-hd_enc_key_type_var = tk.StringVar(value=key_types[0])
-hd_enc_key_type_combobox = ttk.Combobox(hd_enc_key_frame, values=key_types, textvariable=hd_enc_key_type_var)
 
 hd_enc_key_button.pack(side="left", padx=(0, 10))
 hd_enc_key_entry.pack(side="left", padx=(0, 10), expand=True, fill="x")
-hd_enc_key_type_combobox.pack(side="left")
-#hd_enc_key_frame.pack(padx=10, pady=10, fill="x")
-
-#hd_can_enc_button = ttk.Button(hide_data, text="Can Encrypt?", command=lambda: can_encrypt())
-#hd_can_enc_button.pack(padx=10, pady=10)
 
 ## hide button
 hd_hide_button = ttk.Button(hide_data, text="Hide", command=lambda: hide())
@@ -187,14 +177,10 @@ ed_dec_key_frame = ttk.Frame(extract_data)
 ed_dec_key_button = ttk.Button(ed_dec_key_frame, text="Decryption Key", command=lambda: get_input_path(ed_dec_key_path, [("", "*.txt"), ("", "*.key"), ("", "*.pem")]))
 ed_dec_key_path = tk.StringVar()
 ed_dec_key_entry = ttk.Entry(ed_dec_key_frame, textvariable=ed_dec_key_path)
-ed_dec_key_type_var = tk.StringVar(value=key_types[0])
-ed_dec_key_type_combo = ttk.Combobox(ed_dec_key_frame, values=key_types, textvariable=ed_dec_key_type_var)
 
 ed_dec_checkbox.pack(padx=10, pady=10)
 ed_dec_key_button.pack(side="left", padx=(0, 10))
 ed_dec_key_entry.pack(side="left", padx=(0, 10), expand=True, fill="x")
-ed_dec_key_type_combo.pack(side="left")
-#ed_dec_key_frame.pack(fill="x", padx=10, pady=10)
 
 ## extract button
 ed_extract_button = ttk.Button(extract_data, text="Extract", command=lambda: extract())

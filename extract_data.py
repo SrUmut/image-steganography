@@ -40,53 +40,6 @@ def get_ext_and_data_len(enc_metadata):
     file_ext = "".join(file_ext)
     length = int.from_bytes(bytes=dec_metadata[8:], byteorder="big")
     return (file_ext, length)
-
-def get_file_ext(img):
-    n = 0
-    two_bit_ext = []
-    bytes = []
-    # is image four channel (rgba) or not (rgb)
-    four_channel = len(img.getpixel((0, 0))) == 4 
-    for row_idx in range(img.height):
-        for column_idx in range(img.width):
-            pixel = img.getpixel((column_idx, row_idx))
-            if four_channel and pixel[3] < ALPHA_LEVEL:
-                continue
-            for color in pixel[:3]:
-                two_bit = color & 0b11
-                if n < 32:
-                    two_bit_ext.append(two_bit)
-                    n += 1
-                else:
-                    for i in range(0, 32, 4):
-                        byte = two_bit_ext[i] << 6 | two_bit_ext[i+1] << 4 | two_bit_ext[i+2] << 2 | two_bit_ext[i+3]
-                        bytes.append(byte)
-                        if byte == 0:
-                            return "."+"".join(chr(byte) for byte in bytes[:-1])
-                    return "."+"".join(chr(byte) for byte in bytes)
-
-def get_data_len(img):
-    n = 0
-    len_data = []
-    data_len = 0
-    # is image four channel (rgba) or not (rgb)
-    four_channel = len(img.getpixel((0, 0))) == 4 
-    for row_idx in range(img.height):
-        for column_idx in range(img.width):
-            pixel = img.getpixel((column_idx, row_idx))
-            if four_channel and pixel[3] < ALPHA_LEVEL:
-                continue
-            for color in pixel[:3]:
-                if n < 32:
-                    n += 1
-                elif n < 48:
-                    two_bit = color & 0b11
-                    len_data.append(two_bit)
-                    n += 1
-                else:
-                    for i in range(30, -1, -2):
-                        data_len += len_data[(30-i)//2] << i
-                    return data_len
                 
 def get_two_bit_data(img, data_len, two_bit_data):
     n = 0
@@ -122,8 +75,6 @@ def save_output(data, output_path):
 
 def main(image_path, output_path, key):
     img = Image.open(image_path)
-    #file_ext = get_file_ext(img)
-    #data_len = get_data_len(img)
     enc_metadata = get_enc_metadata(img)
     file_ext, data_len = get_ext_and_data_len(enc_metadata)
     two_bit_data = []
